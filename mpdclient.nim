@@ -1,8 +1,10 @@
 # Client for the musik player deamon
-import asyncnet, asyncdispatch, strutils
+import asyncnet, asyncdispatch, strutils, parseutils
 
 type 
-  EventHandler = proc(client: MpdClient, event: string): Future[void]
+  EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
+  AnswerLine = tuple[key, val: string]
+  GenericAnswer = seq[AnswerLine]
   MpdClient = ref object
     host: string
     port: Port
@@ -18,12 +20,17 @@ proc checkHeader(socket: AsyncSocket): Future[bool] {.async.} =
   let line = await socket.recvLine()
   return line.startswith("OK MPD")
 
-proc recvAnswer(socket: AsyncSocket): Future[seq[string]] {.async.} =
+proc splitLine(line: string): AnswerLine =  
+  let pos = line.parseUntil(result.key, ':', 0)
+  result.val = line[pos+2..^1]
+
+proc recvAnswer(socket: AsyncSocket): Future[GenericAnswer] {.async.} =
   result = @[]
   while true:
     let line = await socket.recvLine()
     if line == "OK": break
-    else: result.add(line)
+    else: 
+      result.add(line.splitLine)
 
 proc pingServer(socket: AsyncSocket, interval = 10_000) {.async.} =
   while true:
@@ -65,17 +72,24 @@ proc connect*(client: MpdClient, host: string, port: Port): Future[bool] {.async
     return false
   return true
 
-proc echoEvHandler(client: MpdClient, event: string) {.async.} =
+proc echoEvHandler(client: MpdClient, event: AnswerLine) {.async.} =
   # dummy handler
   echo "EVENT: ", event
   echo await client.currentSong()
 
+proc toTable() = 
+  ## converts the generic answer to a table
+  discard
+
 proc main() {.async.} = 
   var client = newMpdClient(echoEvHandler)
-  if await client.connect("192.168.2.167", 6600.Port):
+  if await client.connect("192.168.1.110", 6600.Port):
     echo "Connected"
     await client.dispatchEvents()
     #echo await client.currentSong()
-
+  else:
+    echo "could not connect"
 when isMainModule:
   waitFor main()
+
+
