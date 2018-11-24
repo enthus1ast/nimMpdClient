@@ -16,13 +16,22 @@ type
     cRepeat = "repeat"
     cSingle = "single"
     cSetvol = "setvol"
+    cCrossfade = "crossfade"
+    cPause = "pause"
+    cStop = "stop"
+    cPlay = "play"
+    cPlayid = "playid"
+    cSeek = "seek"
+    cSeekid = "seekid"
+    cSeekcur = "seekcur"
   MpdSingle* = enum 
     singleFalse = "0"
     singleTrue = "1"
     singleOneshot = "oneshot"
   MpdVolume* = range[0..100]
-
-
+  MpdPause* = enum
+    pauseToggle = "0"
+    pauseResume = "1"
   EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
   AnswerLine* = tuple[key, val: string]
   AnswerLines = seq[AnswerLine]
@@ -132,6 +141,21 @@ proc setvol*(client: MpdClient, volume: MpdVolume): Future[void] {.async.} =
   await client.sendCmd("$# $#" % [$cSetvol, $volume])
   let lines = await client.socketCmd.recvAnswer()
 
+proc crossfade*(client: MpdClient, val: int): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cCrossfade, $val])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc pause*(client: MpdClient, val = pauseToggle): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cPause, $val])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc play*(client: MpdClient, songpos: int): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cPlay, $songpos])
+  let lines = await client.socketCmd.recvAnswer()
+
+#proc playid*(client: MpdClient, songpos: int): Future[void] {.async.} = 
+  #await client.sendCmd("$# $#" % [$cPlay, $songpos])
+  #let lines = await client.socketCmd.recvAnswer()
 
 proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
