@@ -2,17 +2,17 @@
 import asyncnet, asyncdispatch, strutils, parseutils, times, tables
 
 type 
-  MpdCmd = enum
+  MpdCmd* = enum
     cIdle = "idle"
     cNoidle = "noidle"
     cPing = "ping"
     cCurrentsong = "currentsong"
     
   EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
-  AnswerLine = tuple[key, val: string]
+  AnswerLine* = tuple[key, val: string]
   AnswerLines = seq[AnswerLine]
   Answer = Table[string, string]
-  MpdClient = ref object
+  MpdClient* = ref object
     host: string
     port: Port
     socketIdle: AsyncSocket
@@ -24,7 +24,7 @@ proc sendCmd*(client: MpdClient, cmd: string | MpdCmd): Future[void] {.async.} =
   client.lastCmdSent = epochTime()
   await client.socketCmd.send($cmd & "\n")
 
-proc newMpdClient(eventHandler: EventHandler): MpdClient = 
+proc newMpdClient*(eventHandler: EventHandler): MpdClient = 
   result = MpdClient()
   result.eventHandler = eventHandler
 
@@ -66,7 +66,7 @@ proc currentSong*(client: MpdClient): Future[Answer] {.async.} =
   let lines = await client.socketCmd.recvAnswer()
   return lines.toTable
 
-proc dispatchEvents(client: MpdClient) {.async.} =
+proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
   echo "SET IDLE MODE"
   while true:
