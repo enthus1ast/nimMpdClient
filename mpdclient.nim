@@ -24,9 +24,8 @@ proc sendCmd*(client: MpdClient, cmd: string | MpdCmd): Future[void] {.async.} =
   client.lastCmdSent = epochTime()
   await client.socketCmd.send($cmd & "\n")
 
-proc newMpdClient*(eventHandler: EventHandler): MpdClient = 
+proc newMpdClient*(): MpdClient = 
   result = MpdClient()
-  result.eventHandler = eventHandler
 
 proc checkHeader(socket: AsyncSocket): Future[bool] {.async.} = 
   let line = await socket.recvLine()
@@ -76,9 +75,10 @@ proc dispatchEvents*(client: MpdClient) {.async.} =
       await client.eventHandler(client, line)
     await client.socketIdle.send($cIdle & "\n")
 
-proc connect*(client: MpdClient, host: string, port: Port): Future[bool] {.async.} =
+proc connect*(client: MpdClient, host: string, port: Port, eventHandler: EventHandler): Future[bool] {.async.} =
   client.host = host
   client.port = port
+  client.eventHandler = eventHandler
   client.socketCmd = await asyncnet.dial(host, port)
   if (await client.socketCmd.checkHeader()) == false:
     echo "Could not connect to cmd socketCmd"
@@ -109,8 +109,8 @@ when isMainModule:
       echo "EVENT: ", event
       echo await client.currentSong()
 
-    var client = newMpdClient(echoEvHandler)
-    if await client.connect("192.168.1.110", 6600.Port):
+    var client = newMpdClient()
+    if await client.connect("192.168.1.110", 6600.Port, echoEvHandler):
       echo "Connected"
       asyncCheck client.dispatchEvents()
       asyncCheck client.pingServer() # This could maybe deadlock ??
