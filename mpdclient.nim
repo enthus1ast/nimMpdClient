@@ -7,7 +7,22 @@ type
     cNoidle = "noidle"
     cPing = "ping"
     cCurrentsong = "currentsong"
-    
+    cNext = "next"
+    cPrevious = "previous"
+    cStatus = "status"
+    cStats = "stats"
+    cConsume = "consume"
+    cRandom = "random"
+    cRepeat = "repeat"
+    cSingle = "single"
+    cSetvol = "setvol"
+  MpdSingle* = enum 
+    singleFalse = "0"
+    singleTrue = "1"
+    singleOneshot = "oneshot"
+  MpdVolume* = range[0..100]
+
+
   EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
   AnswerLine* = tuple[key, val: string]
   AnswerLines = seq[AnswerLine]
@@ -19,6 +34,20 @@ type
     socketCmd: AsyncSocket
     eventHandler: EventHandler
     lastCmdSent: float
+
+proc toMpdbool(val: bool): string =
+  if val: "1"
+  else: "0"
+
+proc fromMpdbool(val: string): bool = 
+  if val == "1": true
+  else: false
+
+proc toTable(lines: AnswerLines): Answer = 
+  ## converts the AnswerLines to a table
+  result = initTable[string, string]()
+  for line in lines:
+    result[line.key] = line.val
 
 proc sendCmd*(client: MpdClient, cmd: string | MpdCmd): Future[void] {.async.} = 
   client.lastCmdSent = epochTime()
@@ -65,6 +94,45 @@ proc currentSong*(client: MpdClient): Future[Answer] {.async.} =
   let lines = await client.socketCmd.recvAnswer()
   return lines.toTable
 
+proc nextSong*(client: MpdClient): Future[void] {.async.} = 
+  await client.sendCmd(cNext)
+  let lines = await client.socketCmd.recvAnswer()
+
+proc previousSong*(client: MpdClient): Future[void] {.async.} = 
+  await client.sendCmd(cPrevious)
+  let lines = await client.socketCmd.recvAnswer()
+
+proc status*(client: MpdClient): Future[Answer] {.async.} = 
+  await client.sendCmd(cStatus)
+  let lines = await client.socketCmd.recvAnswer()
+  return lines.toTable
+
+proc stats*(client: MpdClient): Future[Answer] {.async.} = 
+  await client.sendCmd(cStats)
+  let lines = await client.socketCmd.recvAnswer()
+  return lines.toTable
+
+proc consume*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cConsume, enabled.toMpdbool])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc random*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cRandom, enabled.toMpdbool])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc repeat*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cRepeat, enabled.toMpdbool])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc single*(client: MpdClient, val: MpdSingle): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cSingle, $val])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc setvol*(client: MpdClient, volume: MpdVolume): Future[void] {.async.} = 
+  await client.sendCmd("$# $#" % [$cSetvol, $volume])
+  let lines = await client.socketCmd.recvAnswer()
+
+
 proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
   echo "SET IDLE MODE"
@@ -96,13 +164,8 @@ proc connect*(client: MpdClient, host: string, port: Port, eventHandler: EventHa
   await client.socketIdle.send($cIdle & "\n")
   return true
 
-proc toTable(lines: AnswerLines): Answer = 
-  ## converts the AnswerLines to a table
-  result = initTable[string, string]()
-  for line in lines:
-    result[line.key] = line.val
-
 when isMainModule:
+  import random as rnd
   proc main() {.async.} =   
     proc echoEvHandler(client: MpdClient, event: AnswerLine) {.async.} =
       # dummy handler
@@ -116,10 +179,18 @@ when isMainModule:
       asyncCheck client.pingServer() # This could maybe deadlock ??
       while true:
         let current = await client.currentSong()
+        #await client.nextSong()
+        echo await client.stats()
+        echo await client.status()
+        await client.setvol(100)
+        #await client.setvol(rand(100))
         echo current
-        await sleepAsync(15000)
+        await sleepAsync(5200)
     else:
       echo "could not connect"
   waitFor main()
+
+#when isMainModule:
+#  assert quote("""foo'bar"""") == """foo\'bar\""""
 
 
