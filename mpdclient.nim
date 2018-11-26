@@ -230,9 +230,9 @@ proc addid*(client: MpdClient, uri: string): Future[Songid] {.async.} =
   await client.sendCmd("$# $#" % [$cAddid, uri])
   let lines = await client.socketCmd.recvAnswer()
   if lines.len <= 0: return
-  let tab = lines.toTable
-  if not tab.hasKey["id"]: return
-  return tab.parseInt
+  let tab = lines.toTable()
+  if not tab.hasKey("id"): return
+  return tab["id"].parseInt
 
 proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
   await client.sendCmd("$# $#" % [$cDelete, $pos])
