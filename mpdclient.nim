@@ -119,38 +119,46 @@ proc pingServer(client: MpdClient, interval = 10.0) {.async.} =
     await sleepAsync(1000)
 
 proc currentSong*(client: MpdClient): Future[Answer] {.async.} = 
+  ## Displays the song info of the current song (same song that is identified in status).
   await client.sendCmd(cCurrentsong)
   let lines = await client.socketCmd.recvAnswer()
   return lines.toTable
 
-proc nextSong*(client: MpdClient): Future[void] {.async.} = 
+proc next*(client: MpdClient): Future[void] {.async.} = 
+  ## Plays next song in the playlist.
   await client.sendCmd(cNext)
   let lines = await client.socketCmd.recvAnswer()
 
-proc previousSong*(client: MpdClient): Future[void] {.async.} = 
+proc previous*(client: MpdClient): Future[void] {.async.} = 
   ## Plays previous song in the playlist.
   await client.sendCmd(cPrevious)
   let lines = await client.socketCmd.recvAnswer()
 
 proc status*(client: MpdClient): Future[Answer] {.async.} = 
+  ## Reports the current status of the player and the volume level. 
   await client.sendCmd(cStatus)
   let lines = await client.socketCmd.recvAnswer()
   return lines.toTable
 
 proc stats*(client: MpdClient): Future[Answer] {.async.} = 
+  ## Displays statistics. 
   await client.sendCmd(cStats)
   let lines = await client.socketCmd.recvAnswer()
   return lines.toTable
 
 proc consume*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  ## Sets consume state to STATE, STATE should be 0 or 1. 
+  ## When consume is activated, each song played is removed from playlist.  
   await client.sendCmd("$# $#" % [$cConsume, enabled.toMpdbool])
   let lines = await client.socketCmd.recvAnswer()
 
 proc random*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  ## Sets random state to STATE, STATE should be 0 or 1
   await client.sendCmd("$# $#" % [$cRandom, enabled.toMpdbool])
   let lines = await client.socketCmd.recvAnswer()
 
 proc repeat*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
+  ## Sets repeat state to STATE, STATE should be 0 or 1.
   await client.sendCmd("$# $#" % [$cRepeat, enabled.toMpdbool])
   let lines = await client.socketCmd.recvAnswer()
 
