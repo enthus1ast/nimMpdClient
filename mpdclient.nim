@@ -2,7 +2,7 @@
 import asyncnet, asyncdispatch, strutils
 import parseutils, times, tables 
 #import locks
-
+const bs = '\\'
 type 
   MpdCmd* = enum
     cAdd = "add"
@@ -301,6 +301,29 @@ proc connect*(client: MpdClient, host: string, port: Port, eventHandler: EventHa
   await client.socketIdle.send($cIdle & "\n")
   return true
 
+proc quote(str: string): string = 
+  ## quotes special chars for sending to mpd
+  result = ""
+  for ch in str:
+    case ch
+    of bs:
+      result.add bs & bs
+    of '"':
+      result.add bs & '"'
+    of '\'':
+      result.add bs & '\''
+    else:
+      result.add ch
+
+when isMainModule:
+#  assert quote("""foo'bar"""") == """foo\'bar\""""
+  assert quote("foo") == "foo"
+  assert quote("foo's") == "foo" & bs & "'s"
+  assert quote(bs & bs) == bs & bs & bs & bs
+  #assert quote("\\") == "\\\\"
+  #assert quote(""""'\""") == """"\"'\\""""
+  #assert quote  r"\\"" == r""\\\\\"""  # \\"   ->  
+
 when isMainModule:
   import random as rnd
   proc main() {.async.} =   
@@ -330,24 +353,4 @@ when isMainModule:
     else:
       echo "could not connect"
   waitFor main()
-
-proc quote(str: string): string = 
-  ## quotes special chars for sending to mpd
-  result = ""
-  for ch in str:
-    case ch
-    of '\\':
-      result.add "\\"
-    of '"':
-      result.add "\""
-    else:
-      result.add ch
-
-when isMainModule:
-#  assert quote("""foo'bar"""") == """foo\'bar\""""
-  assert quote("foo") == "foo"
-  assert quote("foo's") == "foo\\'s"
-  assert quote("\\") == "\\\\"
-  #assert quote(""""'\""") == """"\"'\\""""
-  #assert quote  r"\\"" == r""\\\\\"""  # \\"   ->  
 
