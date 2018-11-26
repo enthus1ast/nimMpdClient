@@ -32,6 +32,19 @@ type
   MpdPause* = enum
     pauseToggle = "0"
     pauseResume = "1"
+  MpdError* = enum
+    ACK_ERROR_NOT_LIST = 1
+    ACK_ERROR_ARG = 2
+    ACK_ERROR_PASSWORD = 3
+    ACK_ERROR_PERMISSION = 4
+    ACK_ERROR_UNKNOWN = 5
+    ACK_ERROR_NO_EXIST = 50
+    ACK_ERROR_PLAYLIST_MAX = 51
+    ACK_ERROR_SYSTEM = 52
+    ACK_ERROR_PLAYLIST_LOAD = 53
+    ACK_ERROR_UPDATE_ALREADY = 54
+    ACK_ERROR_PLAYER_SYNC = 55
+    ACK_ERROR_EXIST = 56
   EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
   AnswerLine* = tuple[key, val: string]
   AnswerLines = seq[AnswerLine]
@@ -76,6 +89,10 @@ proc splitLine(line: string): AnswerLine =
   let pos = line.parseUntil(result.key, ':', 0)
   result.val = line[pos+2..^1]
 
+proc parseError(line: string): MpdError = 
+  echo line 
+
+
 proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
   result = @[]
   while true:
@@ -83,6 +100,9 @@ proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
     if line == "": 
       raise newException(OsError, "disconnected in recvAnswer")
     if line == "OK": break
+    elif line.startswith("ACK"):
+      echo parseError(line) #TODO
+      raise newException(ValueError, "mpd reported error: " & line)
     else: 
       result.add(line.splitLine)
 
@@ -108,6 +128,7 @@ proc nextSong*(client: MpdClient): Future[void] {.async.} =
   let lines = await client.socketCmd.recvAnswer()
 
 proc previousSong*(client: MpdClient): Future[void] {.async.} = 
+  ## Plays previous song in the playlist.
   await client.sendCmd(cPrevious)
   let lines = await client.socketCmd.recvAnswer()
 
@@ -134,28 +155,58 @@ proc repeat*(client: MpdClient, enabled: bool): Future[void] {.async.} =
   let lines = await client.socketCmd.recvAnswer()
 
 proc single*(client: MpdClient, val: MpdSingle): Future[void] {.async.} = 
+  ## Sets single state to STATE, STATE should be 0, 1 or oneshot [5]. 
+  ## When single is activated, playback is stopped after current song, 
+  ## or song is repeated if the ‘repeat’ mode is enabled.  
   await client.sendCmd("$# $#" % [$cSingle, $val])
   let lines = await client.socketCmd.recvAnswer()
 
 proc setvol*(client: MpdClient, volume: MpdVolume): Future[void] {.async.} = 
+  ## Sets volume to VOL, the range of volume is 0-100.
   await client.sendCmd("$# $#" % [$cSetvol, $volume])
   let lines = await client.socketCmd.recvAnswer()
 
 proc crossfade*(client: MpdClient, val: int): Future[void] {.async.} = 
+  ## Sets crossfading between songs.
   await client.sendCmd("$# $#" % [$cCrossfade, $val])
   let lines = await client.socketCmd.recvAnswer()
 
 proc pause*(client: MpdClient, val = pauseToggle): Future[void] {.async.} = 
+  ## Toggles pause/resumes playing, PAUSE is 0 or 1.
   await client.sendCmd("$# $#" % [$cPause, $val])
   let lines = await client.socketCmd.recvAnswer()
 
+proc stop*(client: MpdClient): Future[void] {.async.} = 
+  ## Stops playing.
+  await client.sendCmd("$#"  % [$cStop])
+  let lines = await client.socketCmd.recvAnswer()
+
 proc play*(client: MpdClient, songpos: int): Future[void] {.async.} = 
+  ## Begins playing the playlist at song number SONGPOS.
   await client.sendCmd("$# $#" % [$cPlay, $songpos])
   let lines = await client.socketCmd.recvAnswer()
 
-#proc playid*(client: MpdClient, songpos: int): Future[void] {.async.} = 
-  #await client.sendCmd("$# $#" % [$cPlay, $songpos])
-  #let lines = await client.socketCmd.recvAnswer()
+proc playid*(client: MpdClient, songid: int): Future[void] {.async.} = 
+  ## Begins playing the playlist at song SONGID. 
+  await client.sendCmd("$# $#" % [$cPlayid, $songid])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc seek*(client: MpdClient, songpos, time: int): Future[void] {.async.} = 
+  ## Seeks to the position TIME (in seconds; fractions allowed) of entry SONGPOS in the playlist.
+  await client.sendCmd("$# $# $#" % [$cSeek, $songpos, $time])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc seekid*(client: MpdClient, songid, time: int): Future[void] {.async.} = 
+  ## Seeks to the position TIME (in seconds; fractions allowed) of song SONGID.  
+  await client.sendCmd("$# $# $#" % [$cSeekid, $songid, $time])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc seekcur*(client: MpdClient, time: int): Future[void] {.async.} = 
+  ## Seeks to the position TIME (in seconds; fractions allowed) 
+  ## within the current song. If prefixed by + or -, 
+  ## then the time is relative to the current playing position.  
+  await client.sendCmd("$# $#" % [$cSeekcur, $time])
+  let lines = await client.socketCmd.recvAnswer()
 
 proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
@@ -177,7 +228,6 @@ proc connect*(client: MpdClient, host: string, port: Port, eventHandler: EventHa
     if not client.socketCmd.isClosed():
       client.socketCmd.close()
     return false
-  #asyncCheck client.pingServer() # ping loop
   client.lastCmdSent = epochTime() 
   client.socketIdle = await asyncnet.dial(host, port)
   if (await client.socketIdle.checkHeader()) == false:
@@ -197,16 +247,19 @@ when isMainModule:
       echo await client.currentSong()
 
     var client = newMpdClient()
-    if await client.connect("192.168.1.110", 6600.Port, echoEvHandler):
+    if await client.connect("192.168.2.167", 6600.Port, echoEvHandler):
       echo "Connected"
       asyncCheck client.dispatchEvents()
-      asyncCheck client.pingServer() # This could maybe deadlock ??
+      asyncCheck client.pingServer() # This could maybe deadlock the cmd socket??
       while true:
         let current = await client.currentSong()
         #await client.nextSong()
         echo await client.stats()
         echo await client.status()
-        await client.setvol(100)
+        try:
+          await client.setvol(100)
+        except:
+          discard
         #await client.setvol(rand(100))
         echo current
         await sleepAsync(5200)
