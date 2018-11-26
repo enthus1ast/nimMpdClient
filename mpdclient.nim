@@ -3,27 +3,30 @@ import asyncnet, asyncdispatch, strutils, parseutils, times, tables
 
 type 
   MpdCmd* = enum
-    cIdle = "idle"
-    cNoidle = "noidle"
-    cPing = "ping"
-    cCurrentsong = "currentsong"
-    cNext = "next"
-    cPrevious = "previous"
-    cStatus = "status"
-    cStats = "stats"
+    cAdd = "add"
+    cAddid = "addid"
     cConsume = "consume"
-    cRandom = "random"
-    cRepeat = "repeat"
-    cSingle = "single"
-    cSetvol = "setvol"
     cCrossfade = "crossfade"
+    cCurrentsong = "currentsong"
+    cIdle = "idle"
+    cNext = "next"
+    cNoidle = "noidle"
     cPause = "pause"
-    cStop = "stop"
+    cPing = "ping"
     cPlay = "play"
     cPlayid = "playid"
+    cPrevious = "previous"
+    cRandom = "random"
+    cRepeat = "repeat"
     cSeek = "seek"
-    cSeekid = "seekid"
     cSeekcur = "seekcur"
+    cSeekid = "seekid"
+    cSetvol = "setvol"
+    cSingle = "single"
+    cStats = "stats"
+    cStatus = "status"
+    cStop = "stop"
+    cDelete = "delete"
   MpdSingle* = enum 
     singleFalse = "0"
     singleTrue = "1"
@@ -32,6 +35,8 @@ type
   MpdPause* = enum
     pauseToggle = "0"
     pauseResume = "1"
+  Songid* = int ## the id that gets returned when song is added
+  Songpos* = int ## the position in the playlist
   MpdError* = enum
     ACK_ERROR_NOT_LIST = 1
     ACK_ERROR_ARG = 2
@@ -62,14 +67,13 @@ proc toMpdbool(val: bool): string =
   else: "0"
 
 proc fromMpdbool(val: string): bool = 
-  if val == "1": true
-  else: false
+  val == "1"
 
 proc toTable(lines: AnswerLines): Answer = 
   ## converts the AnswerLines to a table
   result = initTable[string, string]()
   for line in lines:
-    result[line.key] = line.val
+    result[line.key.toLower()] = line.val
 
 proc sendCmd*(client: MpdClient, cmd: string | MpdCmd): Future[void] {.async.} = 
   client.lastCmdSent = epochTime()
@@ -91,7 +95,6 @@ proc splitLine(line: string): AnswerLine =
 
 proc parseError(line: string): MpdError = 
   echo line 
-
 
 proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
   result = @[]
@@ -194,7 +197,7 @@ proc play*(client: MpdClient, songpos: int): Future[void] {.async.} =
   await client.sendCmd("$# $#" % [$cPlay, $songpos])
   let lines = await client.socketCmd.recvAnswer()
 
-proc playid*(client: MpdClient, songid: int): Future[void] {.async.} = 
+proc playid*(client: MpdClient, songid: Songid): Future[void] {.async.} = 
   ## Begins playing the playlist at song SONGID. 
   await client.sendCmd("$# $#" % [$cPlayid, $songid])
   let lines = await client.socketCmd.recvAnswer()
@@ -204,7 +207,7 @@ proc seek*(client: MpdClient, songpos, time: int): Future[void] {.async.} =
   await client.sendCmd("$# $# $#" % [$cSeek, $songpos, $time])
   let lines = await client.socketCmd.recvAnswer()
 
-proc seekid*(client: MpdClient, songid, time: int): Future[void] {.async.} = 
+proc seekid*(client: MpdClient, songid: Songid, time: int): Future[void] {.async.} = 
   ## Seeks to the position TIME (in seconds; fractions allowed) of song SONGID.  
   await client.sendCmd("$# $# $#" % [$cSeekid, $songid, $time])
   let lines = await client.socketCmd.recvAnswer()
@@ -215,6 +218,30 @@ proc seekcur*(client: MpdClient, time: int): Future[void] {.async.} =
   ## then the time is relative to the current playing position.  
   await client.sendCmd("$# $#" % [$cSeekcur, $time])
   let lines = await client.socketCmd.recvAnswer()
+
+proc add*(client: MpdClient, uri: string): Future[void] {.async.} = 
+  ## Adds the file URI to the playlist (directories add recursively). URI can also be a single file. 
+  await client.sendCmd("$# $#"% [$cAdd, uri])
+  let lines = await client.socketCmd.recvAnswer()
+
+proc addid*(client: MpdClient, uri: string): Future[Songid] {.async.} = 
+  ## Adds a song to the playlist (non-recursive) and returns the song id. 
+  ## URI is always a single file or URL.
+  await client.sendCmd("$# $#" % [$cAddid, uri])
+  let lines = await client.socketCmd.recvAnswer()
+  if lines.len <= 0: return
+  let tab = lines.toTable
+  if not tab.hasKey["id"]: return
+  return tab.parseInt
+
+proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
+  await client.sendCmd("$# $#" % [$cDelete, $pos])
+  let lines = await client.socketCmd.recvAnswer()
+
+#proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
+#  await client.sendCmd("$# $#" % [$cDelete, $pos])
+#  let lines = await client.socketCmd.recvAnswer()
+#proc delete*(client: MpdClient, posRange: range[Songpos]): Future[Songid] {.async.} = discard 
 
 proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
