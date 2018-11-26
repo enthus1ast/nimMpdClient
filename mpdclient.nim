@@ -1,5 +1,7 @@
-# Client for the musik player deamon
-import asyncnet, asyncdispatch, strutils, parseutils, times, tables
+# Client for the musik player daemon
+import asyncnet, asyncdispatch, strutils
+import parseutils, times, tables 
+#import locks
 
 type 
   MpdCmd* = enum
@@ -27,6 +29,23 @@ type
     cStatus = "status"
     cStop = "stop"
     cDelete = "delete"
+    cDeleteid = "deleteid"
+
+    cMove = "move"
+    cMoveid = "moveid"
+    #playlistfind
+    #playlistid
+    #playlistinfo
+    #playlistsearch
+    #plchanges
+    #plchangesposid
+    #prio
+    #prioid
+    #rangeid
+    #shuffle
+    #swap
+    #swapid
+    
   MpdSingle* = enum 
     singleFalse = "0"
     singleTrue = "1"
@@ -50,10 +69,10 @@ type
     ACK_ERROR_UPDATE_ALREADY = 54
     ACK_ERROR_PLAYER_SYNC = 55
     ACK_ERROR_EXIST = 56
-  EventHandler = proc(client: MpdClient, event: AnswerLine): Future[void]
+  EventHandler* = proc(client: MpdClient, event: AnswerLine): Future[void]
   AnswerLine* = tuple[key, val: string]
-  AnswerLines = seq[AnswerLine]
-  Answer = Table[string, string]
+  AnswerLines* = seq[AnswerLine]
+  Answer* = Table[string, string]
   MpdClient* = ref object
     host: string
     port: Port
@@ -61,6 +80,11 @@ type
     socketCmd: AsyncSocket
     eventHandler: EventHandler
     lastCmdSent: float
+    #sending: Lock
+  #Filter* = string 
+
+## filter mocup
+# newFilter (file == "foo") and !(file contains "baa")
 
 proc toMpdbool(val: bool): string =
   if val: "1"
@@ -238,6 +262,10 @@ proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} =
   await client.sendCmd("$# $#" % [$cDelete, $pos])
   let lines = await client.socketCmd.recvAnswer()
 
+proc deleteid*(client: MpdClient, pos: Songid): Future[Songid] {.async.} = 
+  await client.sendCmd("$# $#" % [$cDeleteid, $pos])
+  let lines = await client.socketCmd.recvAnswer()
+
 #proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
 #  await client.sendCmd("$# $#" % [$cDelete, $pos])
 #  let lines = await client.socketCmd.recvAnswer()
@@ -289,6 +317,7 @@ when isMainModule:
       while true:
         let current = await client.currentSong()
         #await client.nextSong()
+        await client.stop()
         echo await client.stats()
         echo await client.status()
         try:
@@ -302,7 +331,23 @@ when isMainModule:
       echo "could not connect"
   waitFor main()
 
-#when isMainModule:
-#  assert quote("""foo'bar"""") == """foo\'bar\""""
+proc quote(str: string): string = 
+  ## quotes special chars for sending to mpd
+  result = ""
+  for ch in str:
+    case ch
+    of '\\':
+      result.add "\\"
+    of '"':
+      result.add "\""
+    else:
+      result.add ch
 
+when isMainModule:
+#  assert quote("""foo'bar"""") == """foo\'bar\""""
+  assert quote("foo") == "foo"
+  assert quote("foo's") == "foo\\'s"
+  assert quote("\\") == "\\\\"
+  #assert quote(""""'\""") == """"\"'\\""""
+  #assert quote  r"\\"" == r""\\\\\"""  # \\"   ->  
 
