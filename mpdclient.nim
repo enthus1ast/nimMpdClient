@@ -59,18 +59,20 @@ type
   Songid* = int ## the id that gets returned when song is added
   Songpos* = int ## the position in the playlist
   MpdError* = enum
-    ACK_ERROR_NOT_LIST = 1
-    ACK_ERROR_ARG = 2
-    ACK_ERROR_PASSWORD = 3
-    ACK_ERROR_PERMISSION = 4
-    ACK_ERROR_UNKNOWN = 5
-    ACK_ERROR_NO_EXIST = 50
-    ACK_ERROR_PLAYLIST_MAX = 51
-    ACK_ERROR_SYSTEM = 52
-    ACK_ERROR_PLAYLIST_LOAD = 53
-    ACK_ERROR_UPDATE_ALREADY = 54
-    ACK_ERROR_PLAYER_SYNC = 55
-    ACK_ERROR_EXIST = 56
+    ACK_ERROR_NOT_LIST = "1"
+    ACK_ERROR_ARG = "2"
+    ACK_ERROR_PASSWORD = "3"
+    ACK_ERROR_PERMISSION = "4"
+    ACK_ERROR_UNKNOWN = "5"
+    ACK_ERROR_NO_EXIST = "50"
+    ACK_ERROR_PLAYLIST_MAX = "51"
+    ACK_ERROR_SYSTEM = "52"
+    ACK_ERROR_PLAYLIST_LOAD = "53"
+    ACK_ERROR_UPDATE_ALREADY = "54"
+    ACK_ERROR_PLAYER_SYNC = "55"
+    ACK_ERROR_EXIST = "56"
+  MpdException* = object of Exception
+    error: MpdError
   EventHandler* = proc(client: MpdClient, event: AnswerLine): Future[void]
   AnswerLine* = tuple[key, val: string]
   AnswerLines* = seq[AnswerLine]
@@ -129,7 +131,34 @@ proc splitLine(line: string): AnswerLine =
   result.val = line[pos+2..^1]
 
 proc parseError(line: string): MpdError = 
+  # ACK [error@command_listNum] {current_command} message_text
   echo "TODO PARSE ERROR: " & line 
+
+  var pos = line.skipUntil('[')
+  pos.inc # skip '['
+
+  var errorStr = ""
+  pos += line.parseUntil(errorStr, "@", pos)
+  pos.inc # skip '@'
+
+  var commandListNumStr = ""
+  pos += line.parseUntil(commandListNumStr, ']', pos)
+  pos.inc # skip ']'
+  
+  pos += line.skipUntil('{', pos)
+  pos.inc # skip '{'
+  var currentCommandStr = ""
+  pos += line.parseUntil(currentCommandStr, '}', pos)
+  pos.inc # skip '}'
+  
+  pos += line.skipWhitespace(pos)
+  var messageText = line[pos..^1]
+  
+
+  #var exp = newException(MpdException, "mpd reported error: " & line)
+  var exp = newException(MpdException, messageText)
+  exp.error = parseEnum[MpdError](errorStr)
+  raise exp
 
 proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
   result = @[]
@@ -140,7 +169,8 @@ proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
     if line == "OK": break
     elif line.startswith("ACK"):
       echo parseError(line) #TODO
-      raise newException(ValueError, "mpd reported error: " & line)
+      #raise newException(ValueError, "mpd reported error: " & line)
+      #raise newException(MpdException(error: ACK_ERROR_EXIST), "mpd reported error: " & line)
     else: 
       result.add(line.splitLine)
 
@@ -321,14 +351,13 @@ proc quote*(str: string): string =
   result.add str.escape()
   result.add "\""
 
-proc search*(client: MpdClient, filter: string): Future[void] {.async.} = 
+proc search*(client: MpdClient, filter: string): Future[seq[Answer]] {.async.} = 
   ## the low level version of search, user must supply the filter as a string
+  ## example:
+  ##  await client.search("file $#" % [quote("Head's")])
   await client.sendCmd("$# $#" % [$cSearch, $filter]) # cannot use request here
   let lines = await client.socketCmd.recvAnswer()
-  var files = lines.splitFiles()
-  #echo files
-  for f in files:
-    echo f["file"]
+  return lines.splitFiles()
 
 when isMainModule:
 #  assert quote("""foo'bar"""") == """foo\'bar\""""
@@ -360,20 +389,27 @@ when isMainModule:
       echo "Connected"
       asyncCheck client.dispatchEvents()
       asyncCheck client.pingServer() # This could maybe deadlock the cmd socket??
-      await client.search("artist tool")
       while true:
         let current = await client.currentSong()
         #await client.nextSong()
-        await client.stop()
+        #await client.stop()
         echo await client.stats()
         echo await client.status()
-        try:
-          await client.setvol(100)
-        except:
-          discard
+        #let files = await client.search("artist tool")
+        echo quote("Head's")
+        echo "file $#" % [quote("Head's")]
+        let files = await client.search("file $#" % [quote("Head's")])
+        for f in files:
+          echo f["file"]
+        #await client.setvol(100)
+        #try:
+        #  await client.setvol(100)
+        #except MpdException as EX:
+        #  discard
+        #  echo "could not set volume [error $#]: $#" % [$EX.error, $EX.msg]
         #await client.setvol(rand(100))
         echo current
-        await sleepAsync(5200)
+        await sleepAsync(15200)
     else:
       echo "could not connect"
   waitFor main()
