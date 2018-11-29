@@ -32,21 +32,21 @@ type
     cStop = "stop"
     cDelete = "delete"
     cDeleteid = "deleteid"
-
+    # TODO 
     cMove = "move"
     cMoveid = "moveid"
-    #playlistfind
-    #playlistid
-    #playlistinfo
-    #playlistsearch
-    #plchanges
-    #plchangesposid
-    #prio
-    #prioid
-    #rangeid
-    #shuffle
-    #swap
-    #swapid
+    cPlaylistfind = "playlistfind"
+    cPlaylistid = "playlistid"
+    cPlaylistinfo = "playlistinfo"
+    cPlaylistsearch = "playlistsearch"
+    cPlchanges = "plchanges"
+    cPlchangesposid = "plchangesposid"
+    cPrio = "prio"
+    cPrioid = "prioid"
+    cRangeid = "rangeid"
+    cShuffle = "shuffle"
+    cSwap = "swap"
+    cSwapid = "swapid"
     
   MpdSingle* = enum 
     singleFalse = "0"
@@ -87,7 +87,7 @@ type
     #sending: Lock
   #Filter* = string 
 
-## filter mocup
+# filter mocup
 # newFilter (file == "foo") and !(file contains "baa")
 
 proc toMpdbool(val: bool): string =
@@ -132,8 +132,6 @@ proc splitLine(line: string): AnswerLine =
 
 proc parseError(line: string): MpdError = 
   # ACK [error@command_listNum] {current_command} message_text
-  echo "TODO PARSE ERROR: " & line 
-
   var pos = line.skipUntil('[')
   pos.inc # skip '['
 
@@ -153,9 +151,7 @@ proc parseError(line: string): MpdError =
   
   pos += line.skipWhitespace(pos)
   var messageText = line[pos..^1]
-  
 
-  #var exp = newException(MpdException, "mpd reported error: " & line)
   var exp = newException(MpdException, messageText)
   exp.error = parseEnum[MpdError](errorStr)
   raise exp
@@ -168,18 +164,16 @@ proc recvAnswer(socketCmd: AsyncSocket): Future[AnswerLines] {.async.} =
       raise newException(OsError, "disconnected in recvAnswer")
     if line == "OK": break
     elif line.startswith("ACK"):
-      echo parseError(line) #TODO
-      #raise newException(ValueError, "mpd reported error: " & line)
-      #raise newException(MpdException(error: ACK_ERROR_EXIST), "mpd reported error: " & line)
+      echo parseError(line) 
     else: 
       result.add(line.splitLine)
 
-proc pingServer(client: MpdClient, interval = 10.0) {.async.} =
+proc pingServer(client: MpdClient, interval = 10.0) {.async.} = #TODO
   while true:
     var rest = epochTime() - client.lastCmdSent  
-    echo rest
+    #echo rest
     if rest > interval.float:
-      echo "ping server: ", rest 
+      #echo "ping server: ", rest 
       let lines = await client.request(cPing)
       if lines.len() != 0:
         echo "WARNING ping not OK! got: ", lines 
@@ -192,11 +186,11 @@ proc currentSong*(client: MpdClient): Future[Answer] {.async.} =
 
 proc next*(client: MpdClient): Future[void] {.async.} = 
   ## Plays next song in the playlist.
-  let lines = await client.request(cNext)
+  discard await client.request(cNext)
 
 proc previous*(client: MpdClient): Future[void] {.async.} = 
   ## Plays previous song in the playlist.
-  let lines = await client.request(cPrevious)
+  discard await client.request(cPrevious)
 
 proc status*(client: MpdClient): Future[Answer] {.async.} = 
   ## Reports the current status of the player and the volume level. 
@@ -211,63 +205,63 @@ proc stats*(client: MpdClient): Future[Answer] {.async.} =
 proc consume*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
   ## Sets consume state to STATE, STATE should be 0 or 1. 
   ## When consume is activated, each song played is removed from playlist.  
-  let lines = await client.request("$# $#" % [$cConsume, enabled.toMpdbool])
+  discard await client.request("$# $#" % [$cConsume, enabled.toMpdbool])
 
 proc random*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
   ## Sets random state to STATE, STATE should be 0 or 1
-  let lines = await client.request("$# $#" % [$cRandom, enabled.toMpdbool])
+  discard await client.request("$# $#" % [$cRandom, enabled.toMpdbool])
 
 proc repeat*(client: MpdClient, enabled: bool): Future[void] {.async.} = 
   ## Sets repeat state to STATE, STATE should be 0 or 1.
-  let lines = await client.request("$# $#" % [$cRepeat, enabled.toMpdbool])
+  discard await client.request("$# $#" % [$cRepeat, enabled.toMpdbool])
 
 proc single*(client: MpdClient, val: MpdSingle): Future[void] {.async.} = 
   ## Sets single state to STATE, STATE should be 0, 1 or oneshot [5]. 
   ## When single is activated, playback is stopped after current song, 
   ## or song is repeated if the ‘repeat’ mode is enabled.  
-  let lines = await client.request("$# $#" % [$cSingle, $val])
+  discard await client.request("$# $#" % [$cSingle, $val])
 
 proc setvol*(client: MpdClient, volume: MpdVolume): Future[void] {.async.} = 
   ## Sets volume to VOL, the range of volume is 0-100.
-  let lines = await client.request("$# $#" % [$cSetvol, $volume])
+  discard await client.request("$# $#" % [$cSetvol, $volume])
 
 proc crossfade*(client: MpdClient, val: int): Future[void] {.async.} = 
   ## Sets crossfading between songs.
-  let lines = await client.request("$# $#" % [$cCrossfade, $val])
+  discard await client.request("$# $#" % [$cCrossfade, $val])
 
 proc pause*(client: MpdClient, val = pauseToggle): Future[void] {.async.} = 
   ## Toggles pause/resumes playing, PAUSE is 0 or 1.
-  let lines = await client.request("$# $#" % [$cPause, $val])
+  discard await client.request("$# $#" % [$cPause, $val])
 
 proc stop*(client: MpdClient): Future[void] {.async.} = 
   ## Stops playing.
-  let lines = await client.request("$#"  % [$cStop])
+  discard await client.request("$#" % [$cStop])
 
 proc play*(client: MpdClient, songpos: int): Future[void] {.async.} = 
   ## Begins playing the playlist at song number SONGPOS.
-  let lines = await client.request("$# $#" % [$cPlay, $songpos])
+  discard await client.request("$# $#" % [$cPlay, $songpos])
 
 proc playid*(client: MpdClient, songid: Songid): Future[void] {.async.} = 
   ## Begins playing the playlist at song SONGID. 
-  let lines = await client.request("$# $#" % [$cPlayid, $songid])
+  discard await client.request("$# $#" % [$cPlayid, $songid])
 
 proc seek*(client: MpdClient, songpos, time: int): Future[void] {.async.} = 
   ## Seeks to the position TIME (in seconds; fractions allowed) of entry SONGPOS in the playlist.
-  let lines = await client.request("$# $# $#" % [$cSeek, $songpos, $time])
+  discard await client.request("$# $# $#" % [$cSeek, $songpos, $time])
 
 proc seekid*(client: MpdClient, songid: Songid, time: int): Future[void] {.async.} = 
   ## Seeks to the position TIME (in seconds; fractions allowed) of song SONGID.  
-  let lines = await client.request("$# $# $#" % [$cSeekid, $songid, $time])
+  discard await client.request("$# $# $#" % [$cSeekid, $songid, $time])
 
 proc seekcur*(client: MpdClient, time: int): Future[void] {.async.} = 
   ## Seeks to the position TIME (in seconds; fractions allowed) 
   ## within the current song. If prefixed by + or -, 
   ## then the time is relative to the current playing position.  
-  let lines = await client.request("$# $#" % [$cSeekcur, $time])
+  discard await client.request("$# $#" % [$cSeekcur, $time])
 
 proc add*(client: MpdClient, uri: string): Future[void] {.async.} = 
   ## Adds the file URI to the playlist (directories add recursively). URI can also be a single file. 
-  let lines = await client.request("$# $#"% [$cAdd, uri])
+  discard await client.request("$# $#" % [$cAdd, uri])
 
 proc addid*(client: MpdClient, uri: string): Future[Songid] {.async.} = 
   ## Adds a song to the playlist (non-recursive) and returns the song id. 
@@ -279,10 +273,10 @@ proc addid*(client: MpdClient, uri: string): Future[Songid] {.async.} =
   return tab["id"].parseInt
 
 proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
-  let lines = await client.request("$# $#" % [$cDelete, $pos])
+  discard await client.request("$# $#" % [$cDelete, $pos])
 
 proc deleteid*(client: MpdClient, pos: Songid): Future[Songid] {.async.} = 
-  let lines = await client.request("$# $#" % [$cDeleteid, $pos])
+  discard await client.request("$# $#" % [$cDeleteid, $pos])
 
 #proc delete*(client: MpdClient, pos: Songpos): Future[Songid] {.async.} = 
 #  await client.sendCmd("$# $#" % [$cDelete, $pos])
@@ -304,10 +298,9 @@ proc splitFiles(lines: AnswerLines): seq[Answer] =
 
 proc dispatchEvents*(client: MpdClient) {.async.} =
   ## calls the event handler
-  echo "SET IDLE MODE"
   while true:
     var lines = await client.socketIdle.recvAnswer()
-    echo "LINES: ", lines
+    #echo "LINES: ", lines
     for line in lines:
       await client.eventHandler(client, line)
     await client.socketIdle.send($cIdle & "\n")
@@ -359,7 +352,7 @@ proc search*(client: MpdClient, filter: string): Future[seq[Answer]] {.async.} =
   let lines = await client.socketCmd.recvAnswer()
   return lines.splitFiles()
 
-when isMainModule:
+when isMainModule: # TEST
 #  assert quote("""foo'bar"""") == """foo\'bar\""""
   assert escape("foo") == "foo"
   assert escape("foo's") == "foo" & bs & "'s"
@@ -370,11 +363,11 @@ when isMainModule:
   assert quote("foo") == "\"foo\""
   assert quote("foo's") == "\"foo" & bs & "'s\""
 
-when isMainModule:
+when isMainModule: # EXAMPLE
   import random as rnd
   proc main() {.async.} =   
     proc echoEvHandler(client: MpdClient, event: AnswerLine) {.async.} =
-      # dummy handler
+      # dummy handler, event handler gets "idle" subsystem commands
       echo "EVENT: ", event
       case event.val
       of "playlist":
